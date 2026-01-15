@@ -1,0 +1,14 @@
+﻿node_modules/
+dist/
+
+bin/
+obj/
+.vs/
+
+*.user
+*.suo
+*.db
+
+.env
+appsettings.Development.json
+appsettings.Production.json
