@@ -17,7 +17,7 @@ export class AuthService {
    * POST /auth/register
    */
   async register(registerDto: RegisterDto) {
-    const { email, password } = registerDto;
+    const { name, email, password, phone, role } = registerDto;
 
     // Verificar si el usuario ya existe
     const existingUser = await this.prisma.user.findUnique({
@@ -31,21 +31,32 @@ export class AuthService {
     // Encriptar password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Crear usuario
+    // Crear usuario (rol por defecto USER si no se especifica)
     const user = await this.prisma.user.create({
       data: {
+        name,
         email,
         password: hashedPassword,
+        phone: phone || null,
+        role: role || 'USER',
       },
       select: {
         id: true,
+        name: true,
         email: true,
+        phone: true,
+        role: true,
+        isActive: true,
         createdAt: true,
       },
     });
 
-    // Generar JWT
-    const token = this.jwtService.sign({ sub: user.id, email: user.email });
+    // Generar JWT con rol
+    const token = this.jwtService.sign({ 
+      sub: user.id, 
+      email: user.email,
+      role: user.role,
+    });
 
     return {
       user,
@@ -69,6 +80,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Tu cuenta está inactiva. Contacta al administrador');
+    }
+
     // Verificar password
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
@@ -76,13 +91,21 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Generar JWT
-    const token = this.jwtService.sign({ sub: user.id, email: user.email });
+    // Generar JWT con rol
+    const token = this.jwtService.sign({ 
+      sub: user.id, 
+      email: user.email,
+      role: user.role,
+    });
 
     return {
       user: {
         id: user.id,
+        name: user.name,
         email: user.email,
+        phone: user.phone,
+        role: user.role,
+        isActive: user.isActive,
       },
       token,
     };

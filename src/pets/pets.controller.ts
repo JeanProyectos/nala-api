@@ -32,13 +32,14 @@ export class PetsController {
   }
 
   /**
-   * Obtener todas las mascotas del usuario
+   * Obtener todas las mascotas
    * GET /pets
    * Headers: Authorization: Bearer <token>
+   * USER: Solo sus mascotas | VET/ADMIN: Todas las mascotas
    */
   @Get()
   findAll(@Request() req) {
-    return this.petsService.findAll(req.user.userId);
+    return this.petsService.findAll(req.user.userId, req.user.role);
   }
 
   /**
@@ -48,14 +49,14 @@ export class PetsController {
    */
   @Get(':id')
   findOne(@Request() req, @Param('id', ParseIntPipe) id: number) {
-    return this.petsService.findOne(id, req.user.userId);
+    return this.petsService.findOne(id, req.user.userId, req.user.role);
   }
 
   /**
    * Actualizar una mascota
    * PATCH /pets/:id
    * Headers: Authorization: Bearer <token>
-   * Body: { name?: string, species?: string, age?: number, weight?: number }
+   * Body: { name?, type?, breed?, sex?, birthDate?, weight?, description? }
    */
   @Patch(':id')
   update(
@@ -63,17 +64,17 @@ export class PetsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() updatePetDto: UpdatePetDto,
   ) {
-    return this.petsService.update(id, req.user.userId, updatePetDto);
+    return this.petsService.update(id, req.user.userId, req.user.role, updatePetDto);
   }
 
   /**
-   * Eliminar una mascota
+   * Eliminar una mascota (soft delete)
    * DELETE /pets/:id
    * Headers: Authorization: Bearer <token>
    */
   @Delete(':id')
   remove(@Request() req, @Param('id', ParseIntPipe) id: number) {
-    return this.petsService.remove(id, req.user.userId);
+    return this.petsService.remove(id, req.user.userId, req.user.role);
   }
 }
 

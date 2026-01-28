@@ -6,23 +6,84 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  USER
+  VET
+  ADMIN
+}
+
+enum PetSex {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
   password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @default(now()) @updatedAt
+  name      String?
+  phone     String?
+  role      UserRole  @default(USER)
+  isActive  Boolean   @default(true)
   pets      Pet[]
 }
 
 model Pet {
-  id        Int      @id @default(autoincrement())
-  name      String
-  species   String
-  age       Int?
-  weight    Float?
-  ownerId   Int
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int           @id @default(autoincrement())
+  name         String
+  species      String        @map("species") // En BD se llama 'species', usaremos como 'type'
+  breed        String?
+  age          Int?
+  weight       Float?
+  ownerId      Int
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sex          String?       // Mapeado como String por ahora
+  birthDate    DateTime?     @db.Date
+  description  String?
+  deletedAt    DateTime?     @db.Timestamp(6)
+  appointments Appointment[]
+  vaccines     Vaccine[]
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@map("Pet")
+}
+
+model Veterinary {
+  id           Int           @id @default(autoincrement())
+  name         String
+  address      String
+  phone        String
+  createdAt    DateTime      @default(now())
+  appointments Appointment[]
+}
+
+model Vaccine {
+  id            Int      @id @default(autoincrement())
+  name          String
+  petId         Int
+  pet           Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  appliedDate   DateTime
+  nextDose      DateTime?
+  observations  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([petId])
+  @@map("Vaccine")
+}
+
+model Appointment {
+  id           Int        @id @default(autoincrement())
+  petId        Int
+  veterinaryId Int
+  date         DateTime
+  description  String?
+  createdAt    DateTime   @default(now())
+  pet          Pet        @relation(fields: [petId], references: [id])
+  veterinary   Veterinary @relation(fields: [veterinaryId], references: [id])
 }

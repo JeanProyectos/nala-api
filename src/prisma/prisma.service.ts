@@ -1,26 +1,35 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { config } from 'dotenv';
+
+config(); // Asegurar que las variables de entorno estén cargadas
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
-  async onModuleInit() {
-    try {
-      await this.$connect();
-      this.logger.log('✅ Conectado a la base de datos');
-    } catch (error) {
-      this.logger.error('❌ Error conectando a la base de datos:', error);
-      this.logger.error('Verifica que:');
-      this.logger.error('1. PostgreSQL esté corriendo');
-      this.logger.error('2. DATABASE_URL esté configurado en .env');
-      this.logger.error('3. La base de datos exista');
-      throw error;
+  constructor() {
+    const connectionString = process.env.DATABASE_URL;
+    
+    if (!connectionString) {
+      throw new Error('DATABASE_URL is not defined in environment variables');
     }
+
+    const pool = new Pool({ connectionString });
+    const adapter = new PrismaPg(pool);
+
+    super({ adapter });
+  }
+
+  async onModuleInit() {
+    await this.$connect();
+    this.logger.log('✅ Conectado a PostgreSQL con Prisma');
   }
 
   async onModuleDestroy() {
     await this.$disconnect();
+    this.logger.log('🔌 Desconectado de PostgreSQL con Prisma');
   }
 }
-

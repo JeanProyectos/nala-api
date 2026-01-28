@@ -1,20 +1,32 @@
-import { IsString, IsOptional, IsInt, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsNumber, Min } from 'class-validator';
+import { PetSex } from '@prisma/client';
 
 export class CreatePetDto {
   @IsString()
   name: string;
 
   @IsString()
-  species: string;
+  type: string; // Perro, Gato, Loro, Conejo, Otros
 
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  age?: number;
+  @IsString()
+  breed?: string;
+
+  @IsOptional()
+  @IsEnum(PetSex)
+  sex?: PetSex;
+
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
   weight?: number;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 }
 

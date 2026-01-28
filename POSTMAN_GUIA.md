@@ -16,6 +16,7 @@ Content-Type: application/json
 **Body (raw JSON):**
 ```json
 {
+  "name": "Juan Pérez",
   "email": "test@nala.com",
   "password": "123456"
 }
@@ -26,6 +27,7 @@ Content-Type: application/json
 {
   "user": {
     "id": 1,
+    "name": "Juan Pérez",
     "email": "test@nala.com",
     "createdAt": "2024-01-07T..."
   },
@@ -55,6 +57,8 @@ Content-Type: application/json
   "password": "123456"
 }
 ```
+
+**Nota:** El login solo requiere email y password (no necesita name).
 
 **Respuesta esperada:**
 ```json
@@ -92,9 +96,9 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```json
 {
   "id": 1,
+  "name": "Juan Pérez",
   "email": "test@nala.com",
   "createdAt": "2024-01-07T...",
-  "updatedAt": "2024-01-07T...",
   "pets": []
 }
 ```
@@ -117,9 +121,8 @@ Content-Type: application/json
 ```json
 {
   "name": "Max",
-  "species": "Perro",
-  "age": 3,
-  "weight": 15.5
+  "type": "Perro",
+  "breed": "Labrador"
 }
 ```
 
@@ -128,12 +131,10 @@ Content-Type: application/json
 {
   "id": 1,
   "name": "Max",
-  "species": "Perro",
-  "age": 3,
-  "weight": 15.5,
+  "type": "Perro",
+  "breed": "Labrador",
   "ownerId": 1,
-  "createdAt": "2024-01-07T...",
-  "updatedAt": "2024-01-07T..."
+  "createdAt": "2024-01-07T..."
 }
 ```
 
@@ -157,12 +158,10 @@ Content-Type: application/json
   {
     "id": 1,
     "name": "Max",
-    "species": "Perro",
-    "age": 3,
-    "weight": 15.5,
+    "type": "Perro",
+    "breed": "Labrador",
     "ownerId": 1,
-    "createdAt": "2024-01-07T...",
-    "updatedAt": "2024-01-07T..."
+    "createdAt": "2024-01-07T..."
   }
 ]
 ```
@@ -186,12 +185,10 @@ Content-Type: application/json
 {
   "id": 1,
   "name": "Max",
-  "species": "Perro",
-  "age": 3,
-  "weight": 15.5,
+  "type": "Perro",
+  "breed": "Labrador",
   "ownerId": 1,
-  "createdAt": "2024-01-07T...",
-  "updatedAt": "2024-01-07T..."
+  "createdAt": "2024-01-07T..."
 }
 ```
 
@@ -213,7 +210,8 @@ Content-Type: application/json
 ```json
 {
   "name": "Maximus",
-  "age": 4
+  "type": "Perro",
+  "breed": "Golden Retriever"
 }
 ```
 
@@ -222,12 +220,10 @@ Content-Type: application/json
 {
   "id": 1,
   "name": "Maximus",
-  "species": "Perro",
-  "age": 4,
-  "weight": 15.5,
+  "type": "Perro",
+  "breed": "Golden Retriever",
   "ownerId": 1,
-  "createdAt": "2024-01-07T...",
-  "updatedAt": "2024-01-07T..."
+  "createdAt": "2024-01-07T..."
 }
 ```
 
@@ -250,12 +246,10 @@ Content-Type: application/json
 {
   "id": 1,
   "name": "Maximus",
-  "species": "Perro",
-  "age": 4,
-  "weight": 15.5,
+  "type": "Perro",
+  "breed": "Labrador",
   "ownerId": 1,
-  "createdAt": "2024-01-07T...",
-  "updatedAt": "2024-01-07T..."
+  "createdAt": "2024-01-07T..."
 }
 ```
 
