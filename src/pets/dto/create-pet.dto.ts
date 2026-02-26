@@ -27,6 +27,14 @@ export class CreatePetDto {
 
   @IsOptional()
   @IsString()
+  color?: string;
+
+  @IsOptional()
+  @IsString()
+  photo?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
 }
 

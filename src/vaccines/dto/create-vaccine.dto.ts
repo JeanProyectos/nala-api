@@ -16,5 +16,9 @@ export class CreateVaccineDto {
 
   @IsOptional()
   @IsString()
+  veterinary?: string;
+
+  @IsOptional()
+  @IsString()
   observations?: string;
 }

@@ -1,9 +1,10 @@
-import { Controller, Get, Patch, Body, UseGuards, Request, Param } from '@nestjs/common';
+import { Controller, Get, Patch, Body, UseGuards, Request, Param, Post } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -49,6 +50,15 @@ export class UsersController {
   @Get('permissions')
   getPermissions(@Request() req) {
     return this.usersService.getPermissions(req.user.role);
+  }
+
+  /**
+   * Registra o actualiza el token de notificaciones push
+   * POST /users/push-token
+   */
+  @Post('push-token')
+  registerPushToken(@Request() req, @Body() registerPushTokenDto: RegisterPushTokenDto) {
+    return this.usersService.registerPushToken(req.user.userId, registerPushTokenDto.expoPushToken);
   }
 
   /**

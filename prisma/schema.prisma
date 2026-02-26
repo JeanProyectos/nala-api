@@ -18,36 +18,152 @@ enum PetSex {
   UNKNOWN
 }
 
+enum DewormingType {
+  INTERNAL
+  EXTERNAL
+}
+
+enum AllergyType {
+  FOOD
+  ENVIRONMENTAL
+  MEDICATION
+}
+
+enum SeverityLevel {
+  MILD
+  MODERATE
+  SEVERE
+}
+
+enum ReminderType {
+  VACCINE
+  DEWORMING
+  HEALTH_CHECK
+}
+
+enum ReminderStatus {
+  PENDING
+  COMPLETED
+  POSTPONED
+  SENT
+}
+
+enum VeterinarianStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  VERIFIED
+}
+
+enum VeterinarianSpecialty {
+  GENERAL
+  DERMATOLOGY
+  NUTRITION
+  SURGERY
+  CARDIOLOGY
+  ONCOLOGY
+  ORTHOPEDICS
+  BEHAVIOR
+  EMERGENCY
+}
+
+enum ConsultationType {
+  CHAT
+  VOICE
+  VIDEO
+}
+
+enum ConsultationStatus {
+  PENDING_PAYMENT
+  PAID
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  ERROR
+}
+
+enum WompiAccountStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PostType {
+  CLINICAL_CASE
+  FORUM_DISCUSSION
+  ARTICLE
+}
+
+enum PostVisibility {
+  PUBLIC
+  VETS_ONLY
+}
+
+enum PetSpecies {
+  DOG
+  CAT
+  BIRD
+  RABBIT
+  REPTILE
+  EXOTIC
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
 model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique
-  password  String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime? @default(now()) @updatedAt
-  name      String?
-  phone     String?
-  role      UserRole  @default(USER)
-  isActive  Boolean   @default(true)
-  pets      Pet[]
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime?      @default(now()) @updatedAt
+  name          String?
+  phone         String?
+  role          UserRole       @default(USER)
+  isActive      Boolean        @default(true)
+  expoPushToken String? // Token para notificaciones push de Expo
+  pets          Pet[]
+  reminders     Reminder[]
+  consultations Consultation[] // Consultas como usuario
+  veterinarian  Veterinarian? // Perfil de veterinario (si aplica)
 }
 
 model Pet {
-  id           Int           @id @default(autoincrement())
-  name         String
-  species      String        @map("species") // En BD se llama 'species', usaremos como 'type'
-  breed        String?
-  age          Int?
-  weight       Float?
-  ownerId      Int
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  sex          String?       // Mapeado como String por ahora
-  birthDate    DateTime?     @db.Date
-  description  String?
-  deletedAt    DateTime?     @db.Timestamp(6)
-  appointments Appointment[]
-  vaccines     Vaccine[]
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id            Int             @id @default(autoincrement())
+  name          String
+  species       String          @map("species") // En BD se llama 'species', usaremos como 'type'
+  breed         String?
+  age           Int?
+  weight        Float?
+  ownerId       Int
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  sex           PetSex?         @default(UNKNOWN)
+  birthDate     DateTime?       @db.Date
+  description   String?
+  color         String?
+  photo         String? // URL de la foto
+  deletedAt     DateTime?       @db.Timestamp(6)
+  appointments  Appointment[]
+  vaccines      Vaccine[]
+  dewormings    Deworming[]
+  allergies     Allergy[]
+  healthHistory HealthHistory[]
+  reminders     Reminder[]
+  consultations Consultation[] // Consultas relacionadas a esta mascota
+  owner         User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@map("Pet")
@@ -63,18 +179,66 @@ model Veterinary {
 }
 
 model Vaccine {
-  id            Int      @id @default(autoincrement())
-  name          String
-  petId         Int
-  pet           Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
-  appliedDate   DateTime
-  nextDose      DateTime?
-  observations  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           Int       @id @default(autoincrement())
+  name         String
+  petId        Int
+  pet          Pet       @relation(fields: [petId], references: [id], onDelete: Cascade)
+  appliedDate  DateTime
+  nextDose     DateTime?
+  veterinary   String? // Nombre de la veterinaria (opcional)
+  observations String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([petId])
   @@map("Vaccine")
+}
+
+model Deworming {
+  id           Int           @id @default(autoincrement())
+  type         DewormingType
+  product      String
+  petId        Int
+  pet          Pet           @relation(fields: [petId], references: [id], onDelete: Cascade)
+  appliedDate  DateTime
+  nextDate     DateTime?
+  observations String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([petId])
+  @@map("Deworming")
+}
+
+model Allergy {
+  id          Int           @id @default(autoincrement())
+  type        AllergyType
+  description String
+  severity    SeverityLevel
+  petId       Int
+  pet         Pet           @relation(fields: [petId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([petId])
+  @@map("Allergy")
+}
+
+model HealthHistory {
+  id           Int      @id @default(autoincrement())
+  petId        Int
+  pet          Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  reason       String // Motivo de la consulta
+  diagnosis    String? // Diagnóstico
+  treatment    String? // Tratamiento
+  medications  String? // Medicamentos
+  date         DateTime
+  veterinarian String? // Nombre del veterinario
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([petId])
+  @@map("HealthHistory")
 }
 
 model Appointment {
@@ -86,4 +250,315 @@ model Appointment {
   createdAt    DateTime   @default(now())
   pet          Pet        @relation(fields: [petId], references: [id])
   veterinary   Veterinary @relation(fields: [veterinaryId], references: [id])
+}
+
+model Reminder {
+  id          Int            @id @default(autoincrement())
+  userId      Int
+  petId       Int
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pet         Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
+  type        ReminderType
+  title       String
+  message     String
+  scheduledAt DateTime // Fecha y hora programada para la notificación
+  status      ReminderStatus @default(PENDING)
+  sent        Boolean        @default(false) // Si ya se envió la notificación push
+  sentAt      DateTime? // Fecha en que se envió
+  completedAt DateTime? // Fecha en que se marcó como completado
+  postponedTo DateTime? // Nueva fecha si se pospuso
+  relatedId   Int? // ID del registro relacionado (vaccineId, dewormingId, etc.)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([petId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("Reminder")
+}
+
+model Veterinarian {
+  id                      Int                   @id @default(autoincrement())
+  userId                  Int                   @unique // Relación con User para autenticación
+  user                    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName                String
+  country                 String
+  city                    String
+  specialty               VeterinarianSpecialty
+  yearsExperience         Int
+  professionalDescription String?
+  languages               String[] // Array de idiomas ["Español", "Inglés"]
+  profilePhoto            String? // URL de la foto
+  priceChat               Float                 @default(0) // Precio por consulta CHAT
+  priceVoice              Float                 @default(0) // Precio por consulta VOICE
+  priceVideo              Float                 @default(0) // Precio por consulta VIDEO
+  status                  VeterinarianStatus    @default(PENDING)
+  averageRating           Float                 @default(0)
+  totalConsultations      Int                   @default(0)
+  wompiSubaccountId       String? // ID de subcuenta Wompi Marketplace
+  wompiAccountStatus      WompiAccountStatus    @default(PENDING)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  consultations           Consultation[]
+  ratings                 ConsultationRating[]
+  communityPosts          CommunityPost[]
+  comments                Comment[]
+  followers               Follow[] @relation("Follower")
+  following               Follow[] @relation("Following")
+  reputation              VeterinarianReputation?
+
+  @@index([country])
+  @@index([city])
+  @@index([specialty])
+  @@index([status])
+  @@map("Veterinarian")
+}
+
+model Consultation {
+  id                 Int                 @id @default(autoincrement())
+  userId             Int
+  veterinarianId     Int
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  veterinarian       Veterinarian        @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+  type               ConsultationType
+  status             ConsultationStatus  @default(PENDING_PAYMENT)
+  startDate          DateTime?
+  endDate            DateTime?
+  price              Float // Precio total de la consulta
+  platformFee        Float // Comisión de la plataforma (15%)
+  veterinarianAmount Float // Monto que recibe el veterinario (85%)
+  petId              Int? // Mascota relacionada (opcional)
+  pet                Pet?                @relation(fields: [petId], references: [id], onDelete: SetNull)
+  scheduledAt        DateTime? // Fecha programada para la consulta
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  messages           Message[]
+  rating             ConsultationRating?
+  payment            Payment?
+
+  @@index([userId])
+  @@index([veterinarianId])
+  @@index([status])
+  @@index([type])
+  @@index([scheduledAt])
+  @@map("Consultation")
+}
+
+model Payment {
+  id                 Int           @id @default(autoincrement())
+  consultationId     Int           @unique
+  consultation       Consultation  @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  wompiTransactionId String? // ID de transacción en Wompi
+  wompiReference     String? // Referencia de pago en Wompi
+  amount             Float // Monto total pagado
+  platformFee        Float // Comisión de la plataforma
+  veterinarianAmount Float // Monto para el veterinario
+  status             PaymentStatus @default(PENDING)
+  paymentMethod      String? // Método de pago (card, nequi, etc.)
+  wompiResponse      String?       @db.Text // Respuesta completa de Wompi (JSON)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([status])
+  @@index([wompiTransactionId])
+  @@map("Payment")
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  consultationId Int
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  senderType     String // "user" o "vet"
+  content        String
+  createdAt      DateTime     @default(now())
+
+  @@index([consultationId])
+  @@index([createdAt])
+  @@map("Message")
+}
+
+model ConsultationRating {
+  id             Int          @id @default(autoincrement())
+  consultationId Int          @unique
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  veterinarianId Int
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+  rating         Int // 1-5 estrellas
+  comment        String?
+  createdAt      DateTime     @default(now())
+
+  @@index([veterinarianId])
+  @@map("ConsultationRating")
+}
+
+model PlatformConfig {
+  id                    Int      @id @default(autoincrement())
+  platformFeePercentage Float   @default(0.15) // Porcentaje de comisión (0.15 = 15%)
+  updatedBy             Int? // ID del admin que actualizó
+  updatedAt             DateTime @updatedAt
+  createdAt             DateTime @default(now())
+
+  @@map("PlatformConfig")
+}
+
+// ============ COMMUNITY MODULE ============
+
+model CommunityPost {
+  id                      Int              @id @default(autoincrement())
+  authorId                Int // ID del veterinario (Veterinarian.id)
+  author                  Veterinarian    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  type                    PostType
+  title                   String
+  visibility              PostVisibility  @default(PUBLIC)
+  declaresNoPersonalData  Boolean         @default(false) // Requerido para CLINICAL_CASE
+  tags                    String[] // Tags para búsqueda y filtrado
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  deletedAt               DateTime? // Soft delete
+  
+  // Relaciones específicas por tipo
+  clinicalCaseDetails     ClinicalCaseDetails?
+  forumDetails            ForumDetails?
+  articleDetails          ArticleDetails?
+  
+  // Relaciones generales
+  comments                Comment[]
+  likes                   PostLike[]
+  favorites               PostFavorite[]
+  reports                 Report[]
+  
+  @@index([authorId])
+  @@index([type])
+  @@index([visibility])
+  @@index([createdAt])
+  @@index([tags])
+  @@map("CommunityPost")
+}
+
+model ClinicalCaseDetails {
+  id          Int           @id @default(autoincrement())
+  postId      Int           @unique
+  post        CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  species     PetSpecies
+  age         String? // "2 years", "6 months", etc.
+  weight      Float? // en kg
+  symptoms    String        @db.Text
+  diagnosis   String        @db.Text
+  treatment   String        @db.Text
+  evolution   String?       @db.Text
+  images      String[] // URLs de imágenes
+
+  @@map("ClinicalCaseDetails")
+}
+
+model ForumDetails {
+  id          Int           @id @default(autoincrement())
+  postId      Int           @unique
+  post        CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  description String        @db.Text
+
+  @@map("ForumDetails")
+}
+
+model ArticleDetails {
+  id         Int           @id @default(autoincrement())
+  postId     Int           @unique
+  post       CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  content    String        @db.Text // Rich text content
+  coverImage String? // URL de imagen de portada
+
+  @@map("ArticleDetails")
+}
+
+model Comment {
+  id          Int           @id @default(autoincrement())
+  postId      Int
+  post        CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId    Int // ID del veterinario
+  author      Veterinarian  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content     String        @db.Text
+  parentId    Int? // Para comentarios anidados (respuestas)
+  parent      Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     Comment[]     @relation("CommentReplies")
+  helpfulCount Int          @default(0) // Contador de "útil"
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime? // Soft delete
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
+  @@index([createdAt])
+  @@map("Comment")
+}
+
+model PostLike {
+  id        Int           @id @default(autoincrement())
+  postId    Int
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    Int // ID del usuario (User.id)
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@map("PostLike")
+}
+
+model PostFavorite {
+  id        Int           @id @default(autoincrement())
+  postId    Int
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    Int // ID del usuario (User.id)
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@map("PostFavorite")
+}
+
+model Follow {
+  id          Int          @id @default(autoincrement())
+  followerId  Int // ID del veterinario que sigue
+  follower    Veterinarian @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId Int // ID del veterinario seguido
+  following   Veterinarian @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("Follow")
+}
+
+model Report {
+  id          Int           @id @default(autoincrement())
+  postId      Int
+  post        CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporterId  Int // ID del usuario que reporta
+  reason      String        @db.Text
+  status      ReportStatus  @default(PENDING)
+  reviewedBy  Int? // ID del admin que revisó
+  reviewedAt  DateTime?
+  notes       String?       @db.Text // Notas del admin
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([postId])
+  @@index([reporterId])
+  @@index([status])
+  @@map("Report")
+}
+
+model VeterinarianReputation {
+  id          Int          @id @default(autoincrement())
+  veterinarianId Int       @unique
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+  totalPoints     Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("VeterinarianReputation")
 }

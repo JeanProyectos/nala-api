@@ -15,12 +15,22 @@ export class PetsService {
   async create(userId: number, createPetDto: CreatePetDto) {
     const { birthDate, type, ...rest } = createPetDto;
     
+    // Validar y convertir birthDate
+    let parsedBirthDate: Date | null = null;
+    if (birthDate && birthDate.trim() !== '') {
+      const date = new Date(birthDate);
+      if (!isNaN(date.getTime())) {
+        parsedBirthDate = date;
+      }
+    }
+    
     // Mapear 'type' del DTO a 'species' en la BD
+    console.log('🐾 Creando mascota con datos:', { ...rest, species: type, photo: rest.photo ? 'URL presente' : 'Sin foto' });
     const pet = await this.prisma.pet.create({
       data: {
         ...rest,
         species: type, // La BD usa 'species', el DTO usa 'type'
-        birthDate: birthDate ? new Date(birthDate) : null,
+        birthDate: parsedBirthDate,
         ownerId: userId,
       },
       include: {
@@ -34,22 +44,27 @@ export class PetsService {
       },
     });
 
-    return mapPetResponse(pet);
+    const mappedPet = mapPetResponse(pet);
+    console.log('✅ Mascota creada, respuesta:', { id: mappedPet.id, name: mappedPet.name, photo: mappedPet.photo ? 'URL presente' : 'Sin foto' });
+    return mappedPet;
   }
 
   /**
    * Obtiene todas las mascotas según el rol del usuario
    * - USER: Solo sus mascotas
-   * - VET: Mascotas asignadas (por ahora todas, puede mejorarse con relación)
+   * - VET: Solo sus propias mascotas (para historial de salud)
    * - ADMIN: Todas las mascotas
+   * 
+   * Nota: Para ver pacientes atendidos, usar el endpoint de consultas
    */
   async findAll(userId: number, userRole: UserRole) {
     const where: any = { deletedAt: null }; // Usar deletedAt en lugar de isDeleted
 
-    if (userRole === 'USER') {
+    if (userRole === 'USER' || userRole === 'VET') {
+      // USER y VET solo ven sus propias mascotas
       where.ownerId = userId;
     }
-    // VET y ADMIN pueden ver todas las mascotas
+    // Solo ADMIN puede ver todas las mascotas
 
     const pets = await this.prisma.pet.findMany({
       where,
@@ -124,9 +139,19 @@ export class PetsService {
     }
 
     const { birthDate, type, ...rest } = updatePetDto;
+    
+    // Validar y convertir birthDate
+    let parsedBirthDate: Date | undefined = undefined;
+    if (birthDate && birthDate.trim() !== '') {
+      const date = new Date(birthDate);
+      if (!isNaN(date.getTime())) {
+        parsedBirthDate = date;
+      }
+    }
+    
     const updateData: any = {
       ...rest,
-      birthDate: birthDate ? new Date(birthDate) : undefined,
+      birthDate: parsedBirthDate,
     };
 
     // Si viene 'type' en el DTO, mapearlo a 'species'

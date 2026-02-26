@@ -140,9 +140,12 @@ export class UsersService {
       USER: {
         permissions: ['pets:read', 'pets:write', 'pets:delete', 'vaccines:read', 'vaccines:write'],
         menu: [
+          { id: 'index', label: 'Inicio', path: '/index', icon: '🏠' },
+          { id: 'chat', label: 'Chat', path: '/chat', icon: '💬' },
           { id: 'pets', label: 'Mis Mascotas', path: '/mascota', icon: '🐾' },
+          { id: 'veterinarians', label: 'Veterinarios', path: '/veterinarios', icon: '👨‍⚕️' },
           { id: 'health', label: 'Historial de Salud', path: '/salud', icon: '💊' },
-          { id: 'reminders', label: 'Recordatorios', path: '/recordatorios', icon: '⏰' },
+          { id: 'reminders', label: 'Recordatorios', path: '/recordatorios', icon: '🔔' },
           { id: 'profile', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
         ],
       },
@@ -153,12 +156,16 @@ export class UsersService {
           'vaccines:write',
           'appointments:read',
           'appointments:write',
+          'consultations:read',
+          'consultations:write',
         ],
         menu: [
-          { id: 'assigned-pets', label: 'Mascotas Asignadas', path: '/veterinaria/mascotas', icon: '🐾' },
-          { id: 'medical-history', label: 'Historial Médico', path: '/veterinaria/historial', icon: '📋' },
-          { id: 'vaccines', label: 'Registro de Vacunas', path: '/veterinaria/vacunas', icon: '💉' },
-          { id: 'appointments', label: 'Citas', path: '/veterinaria/citas', icon: '📅' },
+          { id: 'index', label: 'Inicio', path: '/index', icon: '🏠' },
+          { id: 'chat', label: 'Chat', path: '/chat', icon: '💬' },
+          { id: 'pacientes', label: 'Mis Pacientes', path: '/pacientes', icon: '👥' },
+          { id: 'mascota', label: 'Mis Mascotas', path: '/mascota', icon: '🐾' },
+          { id: 'health', label: 'Historial de Salud', path: '/salud', icon: '💊' },
+          { id: 'reminders', label: 'Recordatorios', path: '/recordatorios', icon: '🔔' },
           { id: 'profile', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
         ],
       },
@@ -176,10 +183,10 @@ export class UsersService {
           'reports:read',
         ],
         menu: [
-          { id: 'users', label: 'Usuarios', path: '/admin/usuarios', icon: '👥' },
-          { id: 'all-pets', label: 'Todas las Mascotas', path: '/admin/mascotas', icon: '🐾' },
-          { id: 'vets', label: 'Veterinarios', path: '/admin/veterinarios', icon: '👨‍⚕️' },
-          { id: 'reports', label: 'Reportes', path: '/admin/reportes', icon: '📊' },
+          { id: 'index', label: 'Inicio', path: '/index', icon: '🏠' },
+          { id: 'all-pets', label: 'Todas las Mascotas', path: '/mascota', icon: '🐾' },
+          { id: 'health', label: 'Historial de Salud', path: '/salud', icon: '💊' },
+          { id: 'reminders', label: 'Recordatorios', path: '/recordatorios', icon: '🔔' },
           { id: 'profile', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
         ],
       },
@@ -189,5 +196,21 @@ export class UsersService {
       role,
       ...permissions[role],
     };
+  }
+
+  /**
+   * Registra o actualiza el token de notificaciones push del usuario
+   */
+  async registerPushToken(userId: number, expoPushToken: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { expoPushToken },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        expoPushToken: true,
+      },
+    });
   }
 }

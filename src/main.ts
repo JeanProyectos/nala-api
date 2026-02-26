@@ -5,9 +5,21 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  
+  // Servir archivos estáticos desde la carpeta uploads
+  // Usar process.cwd() para obtener el directorio raíz del proyecto
+  // Esto funciona tanto en desarrollo como en producción
+  const uploadsPath = join(process.cwd(), 'uploads');
+  app.useStaticAssets(uploadsPath, {
+    prefix: '/uploads',
+  });
+  
+  console.log('📁 Archivos estáticos servidos desde:', uploadsPath);
 
   // Habilitar CORS para la app móvil
   app.enableCors({

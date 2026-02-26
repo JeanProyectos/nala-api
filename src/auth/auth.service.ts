@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,20 +25,22 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new UnauthorizedException('El email ya está registrado');
+      throw new ConflictException('El email ya está registrado');
     }
 
     // Encriptar password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Crear usuario (rol por defecto USER si no se especifica)
+    // Crear usuario (rol por defecto USER - no permitir registrarse como ADMIN)
+    // Permitir VET para veterinarios
+    const userRole = role && role !== 'ADMIN' ? (role === 'VET' ? 'VET' : 'USER') : 'USER';
     const user = await this.prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
         phone: phone || null,
-        role: role || 'USER',
+        role: userRole,
       },
       select: {
         id: true,
