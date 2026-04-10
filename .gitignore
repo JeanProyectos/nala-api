@@ -12,3 +12,6 @@ obj/
 .env
 appsettings.Development.json
 appsettings.Production.json
+
+# Archivos subidos en runtime (no versionar)
+uploads/

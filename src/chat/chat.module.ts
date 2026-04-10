@@ -3,11 +3,13 @@ import { ChatGateway } from './chat.gateway';
 import { MessagesModule } from '../messages/messages.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { JwtModule } from '@nestjs/jwt';
+import { DiagnosticsModule } from '../diagnostics/diagnostics.module';
 
 @Module({
   imports: [
     MessagesModule,
     PrismaModule,
+    DiagnosticsModule,
     JwtModule.registerAsync({
       useFactory: () => ({
         secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',

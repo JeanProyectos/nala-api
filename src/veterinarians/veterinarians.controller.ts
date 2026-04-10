@@ -14,6 +14,7 @@ import {
 import { VeterinariansService } from './veterinarians.service';
 import { CreateVeterinarianDto } from './dto/create-veterinarian.dto';
 import { UpdateVeterinarianDto } from './dto/update-veterinarian.dto';
+import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 import { SearchVeterinariansDto } from './dto/search-veterinarians.dto';
 import { VerifyVeterinarianDto } from './dto/verify-veterinarian.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -80,6 +81,16 @@ export class VeterinariansController {
   @UseGuards(JwtAuthGuard)
   update(@Request() req, @Body() updateVeterinarianDto: UpdateVeterinarianDto) {
     return this.veterinariansService.update(req.user.userId, updateVeterinarianDto);
+  }
+
+  /**
+   * Actualiza el estado de disponibilidad del veterinario
+   * PATCH /veterinarians/me/availability
+   */
+  @Patch('me/availability')
+  @UseGuards(JwtAuthGuard)
+  updateAvailability(@Request() req, @Body() updateDto: UpdateAvailabilityDto) {
+    return this.veterinariansService.updateAvailability(req.user.userId, updateDto);
   }
 
   /**

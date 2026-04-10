@@ -6,10 +6,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  
+  // ✅ Configurar WebSocket Adapter para Socket.IO
+  app.useWebSocketAdapter(new IoAdapter(app));
   
   // Servir archivos estáticos desde la carpeta uploads
   // Usar process.cwd() para obtener el directorio raíz del proyecto
@@ -21,10 +25,33 @@ async function bootstrap() {
   
   console.log('📁 Archivos estáticos servidos desde:', uploadsPath);
 
-  // Habilitar CORS para la app móvil
+  // ✅ CORS mejorado para producción
+  const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['https://nala-api.patasypelos.xyz', 'https://patasypelos.xyz'];
+
   app.enableCors({
-    origin: true, // Permite todas las origenes (en producción especifica las IPs)
+    origin: (origin, callback) => {
+      // Permitir requests sin origin (móvil, Postman, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      // En desarrollo, permitir localhost
+      if (process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      
+      // En producción, validar origins
+      if (allowedOrigins.some(allowed => origin.includes(allowed))) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Manejo global de errores
@@ -39,9 +66,13 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 3001;
   await app.listen(port, '0.0.0.0'); // Escuchar en todas las interfaces de red
+  
   console.log(`🚀 API NALA corriendo en http://localhost:${port}`);
   console.log(`📡 Accesible desde la red local`);
+  console.log(`🌐 Entorno: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔒 CORS Origins permitidos: ${allowedOrigins.join(', ')}`);
+  console.log(`🔌 WebSocket habilitado en namespace: /chat`);
 }
 bootstrap();

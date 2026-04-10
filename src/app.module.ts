@@ -20,6 +20,7 @@ import { ChatModule } from './chat/chat.module';
 import { MarketplacePaymentsModule } from './marketplace-payments/marketplace-payments.module';
 import { PlatformConfigModule } from './platform-config/platform-config.module';
 import { CommunityModule } from './community/community.module';
+import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CommunityModule } from './community/community.module';
     MarketplacePaymentsModule,
     PlatformConfigModule,
     CommunityModule,
+    DiagnosticsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

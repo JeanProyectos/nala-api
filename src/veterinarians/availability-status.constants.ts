@@ -1,0 +1,10 @@
+export const AVAILABILITY_STATUS = {
+  AVAILABLE: 'AVAILABLE',
+  IN_CONSULTATION: 'IN_CONSULTATION',
+  UNAVAILABLE: 'UNAVAILABLE',
+} as const;
+
+export const AVAILABILITY_STATUS_VALUES = Object.values(AVAILABILITY_STATUS);
+
+export type AvailabilityStatusValue =
+  (typeof AVAILABILITY_STATUS_VALUES)[number];

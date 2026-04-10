@@ -82,6 +82,23 @@ export class ConsultationsController {
   }
 
   /**
+   * Rechaza una consulta (solo veterinario)
+   * PATCH /consultations/:id/reject
+   */
+  @Patch(':id/reject')
+  async reject(@Request() req, @Param('id', ParseIntPipe) id: number) {
+    const vet = await this.prisma.veterinarian.findUnique({
+      where: { userId: req.user.userId },
+    });
+
+    if (!vet) {
+      throw new ForbiddenException('Solo los veterinarios pueden rechazar consultas');
+    }
+
+    return this.consultationsService.reject(id, vet.id);
+  }
+
+  /**
    * Inicia una consulta
    * PATCH /consultations/:id/start
    */
@@ -102,9 +119,9 @@ export class ConsultationsController {
   finish(
     @Request() req,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { isVet?: boolean },
+    @Body() body: { isVet?: boolean; reason?: string },
   ) {
-    return this.consultationsService.finish(id, req.user.userId, body.isVet || false);
+    return this.consultationsService.finish(id, req.user.userId, body.isVet || false, body.reason);
   }
 
   /**

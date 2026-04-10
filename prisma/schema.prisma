@@ -55,6 +55,12 @@ enum VeterinarianStatus {
   VERIFIED
 }
 
+enum AvailabilityStatus {
+  AVAILABLE
+  IN_CONSULTATION
+  UNAVAILABLE
+}
+
 enum VeterinarianSpecialty {
   GENERAL
   DERMATOLOGY
@@ -75,10 +81,12 @@ enum ConsultationType {
 
 enum ConsultationStatus {
   PENDING_PAYMENT
+  PENDING_APPROVAL
   PAID
   IN_PROGRESS
   FINISHED
   CANCELLED
+  REJECTED
   EXPIRED
 }
 
@@ -131,6 +139,7 @@ model User {
   updatedAt     DateTime?      @default(now()) @updatedAt
   name          String?
   phone         String?
+  photo         String? // URL de la foto de perfil
   role          UserRole       @default(USER)
   isActive      Boolean        @default(true)
   expoPushToken String? // Token para notificaciones push de Expo
@@ -298,6 +307,7 @@ model Veterinarian {
   totalConsultations      Int                   @default(0)
   wompiSubaccountId       String? // ID de subcuenta Wompi Marketplace
   wompiAccountStatus      WompiAccountStatus    @default(PENDING)
+  availabilityStatus      AvailabilityStatus     @default(AVAILABLE) // Estado de disponibilidad configurable
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   consultations           Consultation[]

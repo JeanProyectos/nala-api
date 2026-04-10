@@ -43,18 +43,39 @@ export class MarketplacePaymentsController {
   @Post('payments/create')
   @UseGuards(JwtAuthGuard)
   async createPayment(@Request() req, @Body() dto: CreatePaymentDto) {
-    return this.marketplaceService.createPayment(dto);
+    return this.marketplaceService.createPayment(dto, req.user.userId);
+  }
+
+  @Post('payments/mercadopago/webhook')
+  async handleWebhook(
+    @Request() req,
+    @Body() payload: any,
+    @Headers('x-signature') signature: string,
+    @Headers('x-request-id') requestId: string,
+  ) {
+    const query = req?.query || {};
+    const mergedPayload = {
+      ...payload,
+      type: payload?.type || query.type || query.topic,
+      action: payload?.action || query.action,
+      id: payload?.id || query.id,
+      data: payload?.data || (query['data.id'] ? { id: query['data.id'] } : undefined),
+    };
+
+    // Log del webhook recibido
+    console.log('Webhook recibido:', JSON.stringify(mergedPayload, null, 2));
+    console.log('Signature:', signature);
+    console.log('Request ID:', requestId);
+
+    return this.marketplaceService.processWebhook(mergedPayload, signature || '', requestId || '');
   }
 
   @Post('payments/wompi/webhook')
-  async handleWebhook(
+  async handleWompiWebhook(
     @Body() payload: any,
     @Headers('x-signature') signature: string,
   ) {
-    // Log del webhook recibido
-    console.log('Webhook recibido:', JSON.stringify(payload, null, 2));
-    console.log('Signature:', signature);
-
-    return this.marketplaceService.processWebhook(payload, signature || '');
+    // Mantener compatibilidad con webhooks antiguos de Wompi
+    return this.marketplaceService.processWebhook(payload, signature || '', '');
   }
 }

@@ -3,7 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateVeterinarianDto } from './dto/create-veterinarian.dto';
 import { UpdateVeterinarianDto } from './dto/update-veterinarian.dto';
 import { SearchVeterinariansDto } from './dto/search-veterinarians.dto';
-import { VeterinarianStatus } from '@prisma/client';
+import { UpdateAvailabilityDto } from './dto/update-availability.dto';
+import { VeterinarianStatus, ConsultationStatus } from '@prisma/client';
+import { AVAILABILITY_STATUS } from './availability-status.constants';
 
 @Injectable()
 export class VeterinariansService {
@@ -22,9 +24,15 @@ export class VeterinariansService {
       throw new ForbiddenException('Ya tienes un perfil de veterinario');
     }
 
+    // Filtrar campos undefined y pricePerConsultation (no existe en el modelo)
+    const { pricePerConsultation, ...cleanData } = createVeterinarianDto as any;
+    const dataToSave = Object.fromEntries(
+      Object.entries(cleanData).filter(([_, value]) => value !== undefined)
+    ) as any;
+
     return this.prisma.veterinarian.create({
       data: {
-        ...createVeterinarianDto,
+        ...dataToSave,
         userId,
         status: VeterinarianStatus.PENDING, // Pendiente de verificación
       },
@@ -48,6 +56,13 @@ export class VeterinariansService {
       status: {
         in: [VeterinarianStatus.ACTIVE, VeterinarianStatus.VERIFIED],
       },
+      // Solo mostrar veterinarios disponibles o en consulta (no los no disponibles)
+      availabilityStatus: {
+        in: [
+          AVAILABILITY_STATUS.AVAILABLE,
+          AVAILABILITY_STATUS.IN_CONSULTATION,
+        ],
+      },
     };
 
     if (searchDto.country) {
@@ -70,7 +85,7 @@ export class VeterinariansService {
       where.fullName = { contains: searchDto.search, mode: 'insensitive' };
     }
 
-    return this.prisma.veterinarian.findMany({
+    const veterinarians = await this.prisma.veterinarian.findMany({
       where,
       include: {
         user: {
@@ -78,6 +93,14 @@ export class VeterinariansService {
             id: true,
             name: true,
             email: true,
+          },
+        },
+        consultations: {
+          where: {
+            status: ConsultationStatus.IN_PROGRESS,
+          },
+          select: {
+            id: true,
           },
         },
         _count: {
@@ -90,6 +113,42 @@ export class VeterinariansService {
         { averageRating: 'desc' },
         { totalConsultations: 'desc' },
       ],
+    });
+
+    // Calcular estado de disponibilidad automáticamente si está en consulta
+    return veterinarians.map((vet) => {
+      const isInConsultation = vet.consultations && vet.consultations.length > 0;
+      
+      // Si el veterinario está UNAVAILABLE manualmente, mantener ese estado
+      // Si está AVAILABLE y tiene consultas activas, cambiar a IN_CONSULTATION
+      // Si está IN_CONSULTATION pero no tiene consultas, volver a AVAILABLE (solo si no está UNAVAILABLE)
+      let finalAvailabilityStatus = vet.availabilityStatus;
+      
+      if (vet.availabilityStatus === AVAILABILITY_STATUS.UNAVAILABLE) {
+        // Mantener UNAVAILABLE si el veterinario lo configuró manualmente
+        finalAvailabilityStatus = AVAILABILITY_STATUS.UNAVAILABLE;
+      } else if (
+        isInConsultation &&
+        vet.availabilityStatus === AVAILABILITY_STATUS.AVAILABLE
+      ) {
+        // Si tiene consultas activas y está disponible, cambiar a en consulta
+        finalAvailabilityStatus = AVAILABILITY_STATUS.IN_CONSULTATION;
+      } else if (
+        !isInConsultation &&
+        vet.availabilityStatus === AVAILABILITY_STATUS.IN_CONSULTATION
+      ) {
+        // Si no tiene consultas pero está marcado como en consulta, volver a disponible
+        finalAvailabilityStatus = AVAILABILITY_STATUS.AVAILABLE;
+      }
+
+      // Remover consultas del objeto para no exponer datos innecesarios
+      const { consultations, ...vetWithoutConsultations } = vet;
+      
+      return {
+        ...vetWithoutConsultations,
+        availabilityStatus: finalAvailabilityStatus,
+        isInConsultation,
+      };
     });
   }
 
@@ -157,20 +216,53 @@ export class VeterinariansService {
   }
 
   /**
-   * Actualiza el perfil del veterinario
+   * Actualiza el perfil del veterinario (o lo crea si no existe)
    */
   async update(userId: number, updateVeterinarianDto: UpdateVeterinarianDto) {
     const veterinarian = await this.prisma.veterinarian.findUnique({
       where: { userId },
     });
 
+    // Filtrar campos undefined y pricePerConsultation (no existe en el modelo)
+    const { pricePerConsultation, ...cleanData } = updateVeterinarianDto as any;
+    const dataToSave = Object.fromEntries(
+      Object.entries(cleanData).filter(([_, value]) => value !== undefined)
+    ) as any;
+
     if (!veterinarian) {
-      throw new NotFoundException('No tienes un perfil de veterinario');
+      // Validar campos requeridos para crear
+      if (!dataToSave.fullName || !dataToSave.country || !dataToSave.city || 
+          !dataToSave.specialty || dataToSave.yearsExperience === undefined || 
+          !dataToSave.languages || dataToSave.languages.length === 0) {
+        throw new ForbiddenException(
+          'Faltan campos requeridos: fullName, country, city, specialty, yearsExperience, languages'
+        );
+      }
+
+      // Si no existe, crear el perfil
+      return this.prisma.veterinarian.create({
+        data: {
+          ...dataToSave,
+          userId,
+          status: VeterinarianStatus.PENDING, // Pendiente de verificación
+          availabilityStatus: AVAILABILITY_STATUS.AVAILABLE, // Disponible por defecto
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
     }
 
+    // Si existe, actualizar
     return this.prisma.veterinarian.update({
       where: { userId },
-      data: updateVeterinarianDto,
+      data: dataToSave,
       include: {
         user: {
           select: {
@@ -232,6 +324,35 @@ export class VeterinariansService {
       },
       orderBy: {
         createdAt: 'asc', // Más antiguos primero
+      },
+    });
+  }
+
+  /**
+   * Actualiza el estado de disponibilidad del veterinario
+   */
+  async updateAvailability(userId: number, updateDto: UpdateAvailabilityDto) {
+    const veterinarian = await this.prisma.veterinarian.findUnique({
+      where: { userId },
+    });
+
+    if (!veterinarian) {
+      throw new NotFoundException('Veterinario no encontrado');
+    }
+
+    return this.prisma.veterinarian.update({
+      where: { userId },
+      data: {
+        availabilityStatus: updateDto.availabilityStatus,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
   }
