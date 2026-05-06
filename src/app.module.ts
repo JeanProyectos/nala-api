@@ -21,6 +21,7 @@ import { MarketplacePaymentsModule } from './marketplace-payments/marketplace-pa
 import { PlatformConfigModule } from './platform-config/platform-config.module';
 import { CommunityModule } from './community/community.module';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
+import { VeterinarianSettlementsModule } from './veterinarian-settlements/veterinarian-settlements.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { DiagnosticsModule } from './diagnostics/diagnostics.module';
     PlatformConfigModule,
     CommunityModule,
     DiagnosticsModule,
+    VeterinarianSettlementsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

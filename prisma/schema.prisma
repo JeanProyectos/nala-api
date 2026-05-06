@@ -10,6 +10,7 @@ enum UserRole {
   USER
   VET
   ADMIN
+  FINANCE
 }
 
 enum PetSex {
@@ -103,6 +104,16 @@ enum WompiAccountStatus {
   REJECTED
 }
 
+enum SettlementPaymentStatus {
+  PENDING
+  PAID
+}
+
+enum VeterinarianPaymentMethodType {
+  BANK_ACCOUNT
+  MOBILE_WALLET
+}
+
 enum PostType {
   CLINICAL_CASE
   FORUM_DISCUSSION
@@ -142,11 +153,39 @@ model User {
   photo         String? // URL de la foto de perfil
   role          UserRole       @default(USER)
   isActive      Boolean        @default(true)
-  expoPushToken String? // Token para notificaciones push de Expo
+  expoPushToken String? // Último token (compat); ver PushDevice para todos los dispositivos
   pets          Pet[]
   reminders     Reminder[]
   consultations Consultation[] // Consultas como usuario
   veterinarian  Veterinarian? // Perfil de veterinario (si aplica)
+  pushDevices   PushDevice[]
+  paidSettlements VeterinarianSettlement[]
+}
+
+/// Un registro por dispositivo — permite notificar a todos los móviles del usuario
+model PushDevice {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("PushDevice")
+}
+
+/// OTP de recuperación de contraseña (expira en ~10 min)
+model PasswordResetOtp {
+  id        Int      @id @default(autoincrement())
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("PasswordResetOtp")
 }
 
 model Pet {
@@ -317,6 +356,9 @@ model Veterinarian {
   followers               Follow[] @relation("Follower")
   following               Follow[] @relation("Following")
   reputation              VeterinarianReputation?
+  ownerRatingsGiven       ConsultationOwnerRating[]
+  settlements             VeterinarianSettlement[]
+  paymentMethods          VeterinarianPaymentMethod[]
 
   @@index([country])
   @@index([city])
@@ -341,10 +383,15 @@ model Consultation {
   petId              Int? // Mascota relacionada (opcional)
   pet                Pet?                @relation(fields: [petId], references: [id], onDelete: SetNull)
   scheduledAt        DateTime? // Fecha programada para la consulta
+  liquidated         Boolean             @default(false)
+  liquidatedAt       DateTime?
+  settlementId       Int?
+  settlement         VeterinarianSettlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   messages           Message[]
   rating             ConsultationRating?
+  ownerRatingByVet   ConsultationOwnerRating?
   payment            Payment?
 
   @@index([userId])
@@ -352,6 +399,8 @@ model Consultation {
   @@index([status])
   @@index([type])
   @@index([scheduledAt])
+  @@index([liquidated])
+  @@index([settlementId])
   @@map("Consultation")
 }
 
@@ -365,14 +414,63 @@ model Payment {
   platformFee        Float // Comisión de la plataforma
   veterinarianAmount Float // Monto para el veterinario
   status             PaymentStatus @default(PENDING)
+  approvedAt         DateTime?
   paymentMethod      String? // Método de pago (card, nequi, etc.)
   wompiResponse      String?       @db.Text // Respuesta completa de Wompi (JSON)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
   @@index([status])
+  @@index([approvedAt])
   @@index([wompiTransactionId])
   @@map("Payment")
+}
+
+model VeterinarianSettlement {
+  id                Int                     @id @default(autoincrement())
+  veterinarianId    Int
+  veterinarian      Veterinarian            @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+  settlementDate    DateTime                @db.Date
+  cutoffAt          DateTime
+  totalConsultations Int
+  totalGross        Float
+  totalCommission   Float
+  totalNet          Float
+  status            SettlementPaymentStatus @default(PENDING)
+  paidAt            DateTime?
+  paidById          Int?
+  paidBy            User?                   @relation(fields: [paidById], references: [id], onDelete: SetNull)
+  paymentMethodId   Int?
+  paymentMethod     VeterinarianPaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  paymentMethodUsed String?
+  paymentReference  String?
+  notes             String?                 @db.Text
+  consultations     Consultation[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@unique([veterinarianId, settlementDate])
+  @@index([status])
+  @@index([cutoffAt])
+  @@index([paidById])
+  @@map("VeterinarianSettlement")
+}
+
+model VeterinarianPaymentMethod {
+  id                Int                           @id @default(autoincrement())
+  veterinarianId    Int
+  veterinarian      Veterinarian                  @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+  type              VeterinarianPaymentMethodType
+  label             String
+  details           Json
+  active            Boolean                       @default(false)
+  settlements       VeterinarianSettlement[]
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  @@index([veterinarianId])
+  @@index([active])
+  @@map("VeterinarianPaymentMethod")
 }
 
 model Message {
@@ -400,6 +498,21 @@ model ConsultationRating {
 
   @@index([veterinarianId])
   @@map("ConsultationRating")
+}
+
+/// Calificación del tutor/mascota por el veterinario tras finalizar la consulta
+model ConsultationOwnerRating {
+  id               Int          @id @default(autoincrement())
+  consultationId   Int          @unique
+  consultation     Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  veterinarianId   Int
+  veterinarian     Veterinarian @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+  rating           Int
+  comment          String?
+  createdAt        DateTime     @default(now())
+
+  @@index([veterinarianId])
+  @@map("ConsultationOwnerRating")
 }
 
 model PlatformConfig {

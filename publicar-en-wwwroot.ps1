@@ -50,7 +50,12 @@ Write-Host "[2] Preparando carpeta de publicacion..." -ForegroundColor Yellow
 # Crear carpeta de destino si no existe
 if (Test-Path $targetPath) {
     Write-Host "  La carpeta de publicacion ya existe: $targetPath" -ForegroundColor Yellow
-    $overwrite = Read-Host "  Deseas eliminar y recrear? (S/N)"
+    if ($env:NALA_PUBLISH_NONINTERACTIVE -eq "1") {
+        $overwrite = "N"
+        Write-Host "  (NALA_PUBLISH_NONINTERACTIVE=1) No se recrea la carpeta completa; solo se actualizan archivos." -ForegroundColor Gray
+    } else {
+        $overwrite = Read-Host "  Deseas eliminar y recrear? (S/N)"
+    }
     if ($overwrite -eq "S" -or $overwrite -eq "s") {
         Remove-Item -Path $targetPath -Recurse -Force -ErrorAction SilentlyContinue
         Write-Host "  Carpeta eliminada" -ForegroundColor Green
@@ -199,4 +204,6 @@ Write-Host "Para actualizar la publicacion:" -ForegroundColor Yellow
 Write-Host "  1. Compilar cambios: npm run build" -ForegroundColor White
 Write-Host "  2. Ejecutar este script nuevamente" -ForegroundColor White
 Write-Host ""
-pause
+if ($env:NALA_PUBLISH_NONINTERACTIVE -ne "1") {
+    pause
+}

@@ -20,6 +20,15 @@ export class ConsultationsService {
     private chatGateway: ChatGateway,
   ) {}
 
+  /** Resuelve el id de fila Veterinarian a partir del userId del dueño del perfil vet */
+  private async getVeterinarianRecordIdForUser(userId: number): Promise<number | null> {
+    const v = await this.prisma.veterinarian.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    return v?.id ?? null;
+  }
+
   /**
    * Crea una nueva consulta
    */
@@ -113,25 +122,24 @@ export class ConsultationsService {
       },
     });
 
-    // Enviar notificación push al veterinario
-    if (consultation.veterinarian.user.expoPushToken) {
-      const petName = consultation.pet?.name || 'una mascota';
-      const consultationTypeText = 
-        consultation.type === ConsultationType.CHAT ? 'chat' :
-        consultation.type === ConsultationType.VOICE ? 'llamada de voz' :
-        'videollamada';
-      
-      await this.notificationsService.sendPushNotification(
-        consultation.veterinarian.user.expoPushToken,
-        'Nueva consulta pendiente',
-        `Tienes una nueva consulta de ${consultationTypeText} para ${petName}`,
-        {
-          type: 'consultation_created',
-          consultationId: consultation.id,
-          consultationType: consultation.type,
-        },
-      );
-    }
+    const petName = consultation.pet?.name || 'una mascota';
+    const consultationTypeText =
+      consultation.type === ConsultationType.CHAT
+        ? 'chat'
+        : consultation.type === ConsultationType.VOICE
+          ? 'llamada de voz'
+          : 'videollamada';
+
+    await this.notificationsService.sendPushToUser(
+      consultation.veterinarian.user.id,
+      'Nueva consulta pendiente',
+      `Tienes una nueva consulta de ${consultationTypeText} para ${petName}`,
+      {
+        type: 'consultation_created',
+        consultationId: consultation.id,
+        consultationType: consultation.type,
+      },
+    );
 
     return consultation;
   }
@@ -221,25 +229,24 @@ export class ConsultationsService {
       },
     });
 
-    // Enviar notificación al usuario de que la consulta fue aceptada
-    if (updated.user.expoPushToken) {
-      const consultationTypeText = 
-        updated.type === ConsultationType.CHAT ? 'chat' :
-        updated.type === ConsultationType.VOICE ? 'llamada de voz' :
-        'videollamada';
-      
-      await this.notificationsService.sendPushNotification(
-        updated.user.expoPushToken,
-        'Consulta aceptada',
-        `El veterinario ha aceptado tu consulta de ${consultationTypeText}`,
-        {
-          type: 'consultation_accepted',
-          consultationId: updated.id,
-          consultationType: updated.type,
-          autoStartCall: updated.type !== ConsultationType.CHAT, // Si es VOICE o VIDEO, iniciar automáticamente
-        },
-      );
-    }
+    const consultationTypeText =
+      updated.type === ConsultationType.CHAT
+        ? 'chat'
+        : updated.type === ConsultationType.VOICE
+          ? 'llamada de voz'
+          : 'videollamada';
+
+    await this.notificationsService.sendPushToUser(
+      updated.user.id,
+      'Consulta aceptada',
+      `El veterinario ha aceptado tu consulta de ${consultationTypeText}`,
+      {
+        type: 'consultation_accepted',
+        consultationId: updated.id,
+        consultationType: updated.type,
+        autoStartCall: updated.type !== ConsultationType.CHAT,
+      },
+    );
 
     // Si es VOICE o VIDEO, iniciar llamada automáticamente vía WebSocket
     if (updated.type !== ConsultationType.CHAT) {
@@ -346,18 +353,15 @@ export class ConsultationsService {
       },
     });
 
-    // Enviar notificación al usuario de que la consulta fue rechazada
-    if (updated.user.expoPushToken) {
-      await this.notificationsService.sendPushNotification(
-        updated.user.expoPushToken,
-        'Consulta rechazada',
-        'El veterinario ha rechazado tu consulta',
-        {
-          type: 'consultation_rejected',
-          consultationId: updated.id,
-        },
-      );
-    }
+    await this.notificationsService.sendPushToUser(
+      updated.user.id,
+      'Consulta rechazada',
+      'El veterinario ha rechazado tu consulta',
+      {
+        type: 'consultation_rejected',
+        consultationId: updated.id,
+      },
+    );
 
     return updated;
   }
@@ -376,7 +380,8 @@ export class ConsultationsService {
 
     // Verificar permisos
     if (isVet) {
-      if (consultation.veterinarianId !== userId) {
+      const vetRecordId = await this.getVeterinarianRecordIdForUser(userId);
+      if (!vetRecordId || consultation.veterinarianId !== vetRecordId) {
         throw new ForbiddenException('No tienes permisos para esta consulta');
       }
     } else {
@@ -438,9 +443,10 @@ export class ConsultationsService {
       throw new NotFoundException('Consulta no encontrada');
     }
 
-    // Verificar permisos
+    // Verificar permisos (veterinarianId en consulta es id de tabla Veterinarian, no userId)
     if (isVet) {
-      if (consultation.veterinarianId !== userId) {
+      const vetRecordId = await this.getVeterinarianRecordIdForUser(userId);
+      if (!vetRecordId || consultation.veterinarianId !== vetRecordId) {
         throw new ForbiddenException('No tienes permisos para esta consulta');
       }
     } else {
@@ -501,6 +507,12 @@ export class ConsultationsService {
       } catch (error) {
         console.error('Error notificando cierre por no pago:', error);
       }
+    }
+
+    try {
+      this.chatGateway.notifyConsultationFinished(updated.id);
+    } catch (error) {
+      console.error('Error emitiendo consultation_finished:', error);
     }
 
     return updated;
@@ -602,6 +614,7 @@ export class ConsultationsService {
         },
         payment: true,
         rating: true,
+        ownerRatingByVet: true,
       },
     });
 
@@ -663,5 +676,173 @@ export class ConsultationsService {
     await this.veterinariansService.updateRating(consultation.veterinarianId);
 
     return rating;
+  }
+
+  /**
+   * El veterinario califica al tutor/usuario tras finalizar la consulta.
+   */
+  async rateOwnerByVet(consultationId: number, vetUserId: number, rateDto: RateConsultationDto) {
+    const vetRecordId = await this.getVeterinarianRecordIdForUser(vetUserId);
+    if (!vetRecordId) {
+      throw new ForbiddenException('Solo los veterinarios pueden calificar al usuario');
+    }
+
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id: consultationId },
+      include: { ownerRatingByVet: true },
+    });
+
+    if (!consultation) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
+    if (consultation.veterinarianId !== vetRecordId) {
+      throw new ForbiddenException('No tienes permisos para esta consulta');
+    }
+
+    if (consultation.status !== ConsultationStatus.FINISHED) {
+      throw new BadRequestException('Solo se puede calificar al usuario en consultas finalizadas');
+    }
+
+    if (consultation.ownerRatingByVet) {
+      throw new BadRequestException('Ya calificaste al usuario en esta consulta');
+    }
+
+    if (rateDto.rating < 1 || rateDto.rating > 5) {
+      throw new BadRequestException('La calificación debe estar entre 1 y 5');
+    }
+
+    return this.prisma.consultationOwnerRating.create({
+      data: {
+        consultationId,
+        veterinarianId: vetRecordId,
+        rating: rateDto.rating,
+        comment: rateDto.comment ?? null,
+      },
+    });
+  }
+
+  /**
+   * Cancelación por veterinario (antes o durante la consulta / llamada).
+   */
+  async cancelByVeterinarian(consultationId: number, vetUserId: number, reason?: string) {
+    const vetRecordId = await this.getVeterinarianRecordIdForUser(vetUserId);
+    if (!vetRecordId) {
+      throw new ForbiddenException('Solo los veterinarios pueden cancelar desde esta acción');
+    }
+
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id: consultationId },
+      include: {
+        user: { select: { id: true } },
+      },
+    });
+
+    if (!consultation) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
+    if (consultation.veterinarianId !== vetRecordId) {
+      throw new ForbiddenException('No tienes permisos para esta consulta');
+    }
+
+    const cancellable: ConsultationStatus[] = [
+      ConsultationStatus.PENDING_APPROVAL,
+      ConsultationStatus.PENDING_PAYMENT,
+      ConsultationStatus.PAID,
+      ConsultationStatus.IN_PROGRESS,
+    ];
+
+    if (!cancellable.includes(consultation.status)) {
+      throw new BadRequestException('Esta consulta no se puede cancelar en su estado actual');
+    }
+
+    const updated = await this.prisma.consultation.update({
+      where: { id: consultationId },
+      data: { status: ConsultationStatus.CANCELLED },
+    });
+
+    try {
+      await this.chatGateway.notifyConsultationCancelled(consultationId, {
+        reason: reason || 'CANCELLED_BY_VET',
+        cancelledByVetUserId: vetUserId,
+      });
+    } catch (e) {
+      console.error('notifyConsultationCancelled:', e);
+    }
+
+    await this.notificationsService.sendPushToUser(
+      consultation.user.id,
+      'Consulta cancelada',
+      'El veterinario canceló la consulta.',
+      {
+        type: 'consultation_cancelled',
+        consultationId,
+        reason: reason || 'CANCELLED_BY_VET',
+      },
+    );
+
+    return updated;
+  }
+
+  /**
+   * Cancelación por usuario solo mientras el veterinario no haya aceptado la consulta.
+   */
+  async cancelByUser(consultationId: number, userId: number, reason?: string) {
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id: consultationId },
+      include: {
+        veterinarian: {
+          include: {
+            user: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!consultation) {
+      throw new NotFoundException('Consulta no encontrada');
+    }
+
+    if (consultation.userId !== userId) {
+      throw new ForbiddenException('No tienes permisos para esta consulta');
+    }
+
+    if (consultation.status !== ConsultationStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('Solo puedes cancelar consultas pendientes de respuesta');
+    }
+
+    const updated = await this.prisma.consultation.update({
+      where: { id: consultationId },
+      data: {
+        status: ConsultationStatus.CANCELLED,
+      },
+    });
+
+    try {
+      await this.chatGateway.notifyConsultationCancelled(consultationId, {
+        reason: reason || 'CANCELLED_BY_USER',
+        cancelledByUserId: userId,
+      });
+    } catch (error) {
+      console.error('notifyConsultationCancelled user:', error);
+    }
+
+    await this.notificationsService.sendPushToUser(
+      consultation.veterinarian.user.id,
+      'Consulta cancelada',
+      'El usuario canceló la consulta antes de ser aceptada.',
+      {
+        type: 'consultation_cancelled',
+        consultationId,
+        reason: reason || 'CANCELLED_BY_USER',
+      },
+    );
+
+    return updated;
   }
 }

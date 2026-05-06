@@ -1,15 +1,28 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { MailService } from '../mail/mail.service';
+
+const RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const RESET_MAX_ATTEMPTS = 5;
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private mailService: MailService,
   ) {}
 
   /**
@@ -31,9 +44,8 @@ export class AuthService {
     // Encriptar password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Crear usuario (rol por defecto USER - no permitir registrarse como ADMIN)
-    // Permitir VET para veterinarios
-    const userRole = role && role !== 'ADMIN' ? (role === 'VET' ? 'VET' : 'USER') : 'USER';
+    // Crear usuario (rol por defecto USER). Roles operativos se asignan fuera del registro publico.
+    const userRole = role === 'VET' ? 'VET' : 'USER';
     const user = await this.prisma.user.create({
       data: {
         name,
@@ -113,6 +125,113 @@ export class AuthService {
       },
       token,
     };
+  }
+
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
+  /**
+   * Solicita código OTP por correo (no revela si el email existe).
+   */
+  async requestPasswordReset(emailRaw: string) {
+    const generic = {
+      message:
+        'Si el correo está registrado en NALA, recibirás un código de 6 dígitos en los próximos minutos.',
+    };
+
+    const emailNorm = this.normalizeEmail(emailRaw);
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: emailNorm, mode: 'insensitive' } },
+    });
+    if (!user) {
+      return generic;
+    }
+
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const codeHash = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + RESET_CODE_TTL_MS);
+
+    const emailKey = this.normalizeEmail(user.email);
+    await this.prisma.passwordResetOtp.deleteMany({ where: { email: emailKey } });
+    await this.prisma.passwordResetOtp.create({
+      data: {
+        email: emailKey,
+        codeHash,
+        expiresAt,
+        attempts: 0,
+      },
+    });
+
+    await this.mailService.sendMail(
+      user.email,
+      'NALA — recuperación de contraseña',
+      `Tu código de verificación es: ${code}\n\nVence en 10 minutos. Si no solicitaste este cambio, ignora este mensaje.`,
+    );
+
+    return generic;
+  }
+
+  private async getActiveOtp(email: string) {
+    const normalized = this.normalizeEmail(email);
+    return this.prisma.passwordResetOtp.findFirst({
+      where: { email: normalized },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async verifyPasswordResetCode(emailRaw: string, code: string) {
+    const email = this.normalizeEmail(emailRaw);
+    const row = await this.getActiveOtp(email);
+    if (!row) {
+      throw new BadRequestException('No hay solicitud de recuperación activa para este correo.');
+    }
+    if (row.expiresAt.getTime() < Date.now()) {
+      await this.prisma.passwordResetOtp.delete({ where: { id: row.id } });
+      throw new BadRequestException('El código expiró. Solicita uno nuevo.');
+    }
+    if (row.attempts >= RESET_MAX_ATTEMPTS) {
+      throw new HttpException(
+        'Demasiados intentos fallidos. Solicita un código nuevo.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const ok = await bcrypt.compare(code.trim(), row.codeHash);
+    if (!ok) {
+      await this.prisma.passwordResetOtp.update({
+        where: { id: row.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new UnauthorizedException('Código incorrecto.');
+    }
+
+    return { valid: true };
+  }
+
+  async resetPasswordWithCode(emailRaw: string, code: string, newPassword: string) {
+    await this.verifyPasswordResetCode(emailRaw, code);
+
+    const email = this.normalizeEmail(emailRaw);
+    const row = await this.getActiveOtp(email);
+    if (!row) {
+      throw new BadRequestException('Código ya no válido.');
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    });
+    if (!user) {
+      throw new BadRequestException('Usuario no encontrado.');
+    }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashed },
+    });
+    await this.prisma.passwordResetOtp.delete({ where: { id: row.id } });
+
+    return { message: 'Contraseña actualizada. Ya puedes iniciar sesión.' };
   }
 }
 

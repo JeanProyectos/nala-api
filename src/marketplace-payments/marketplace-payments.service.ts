@@ -145,6 +145,7 @@ export class MarketplacePaymentsService {
         platformFee: consultation.platformFee,
         veterinarianAmount: consultation.veterinarianAmount,
         status: PaymentStatus.PENDING,
+        approvedAt: null,
         wompiResponse: JSON.stringify(preference),
       };
 
@@ -252,6 +253,10 @@ export class MarketplacePaymentsService {
       const mpStatus = mpPayment.status;
       let paymentStatus: PaymentStatus;
       let consultationStatus: ConsultationStatus;
+      const approvedAt =
+        mpPayment.date_approved != null
+          ? new Date(mpPayment.date_approved)
+          : payment.approvedAt ?? null;
 
       if (mpStatus === 'approved') {
         paymentStatus = PaymentStatus.APPROVED;
@@ -273,11 +278,33 @@ export class MarketplacePaymentsService {
         consultationStatus = payment.consultation.status;
       }
 
+      const wasAlreadyApproved =
+        payment.status === PaymentStatus.APPROVED &&
+        paymentStatus === PaymentStatus.APPROVED &&
+        payment.approvedAt != null;
+
+      if (
+        payment.status === paymentStatus &&
+        payment.consultation.status === consultationStatus &&
+        (paymentStatus !== PaymentStatus.APPROVED ||
+          (payment.approvedAt?.getTime() ?? 0) === (approvedAt?.getTime() ?? 0))
+      ) {
+        this.logger.log(
+          `Webhook idempotente ignorado para pago ${payment.id} (${externalReference})`,
+        );
+        return {
+          consultationId: payment.consultationId,
+          status: paymentStatus,
+          duplicated: true,
+        };
+      }
+
       // Actualizar pago
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: {
           status: paymentStatus,
+          approvedAt: paymentStatus === PaymentStatus.APPROVED ? approvedAt : null,
           wompiTransactionId: mpPayment.id.toString(),
           wompiResponse: JSON.stringify(mpPayment),
           updatedAt: new Date(),
@@ -295,40 +322,44 @@ export class MarketplacePaymentsService {
       this.logger.log(`Pago ${payment.id} actualizado: ${paymentStatus} - Consulta: ${consultationStatus}`);
 
       // Si el pago fue aprobado, emitir evento para WebSocket
-      if (paymentStatus === PaymentStatus.APPROVED) {
+      if (paymentStatus === PaymentStatus.APPROVED && !wasAlreadyApproved) {
         this.chatGateway.notifyPaymentApproved(
           payment.consultationId,
           payment.consultation.veterinarian.userId,
           payment.consultation.userId,
         );
 
-        if (payment.consultation.user?.expoPushToken) {
-          await this.notificationsService.sendPushNotification(
-            payment.consultation.user.expoPushToken,
-            'Pago confirmado',
-            'Tu pago fue aprobado. Ya puedes continuar con la consulta.',
-            {
-              type: 'payment_approved',
-              consultationId: payment.consultationId,
-            },
-          );
-        }
+        await this.notificationsService.sendPushToUser(
+          payment.consultation.userId,
+          'Pago confirmado',
+          'Tu pago fue aprobado. Ya puedes continuar con la consulta.',
+          {
+            type: 'payment_approved',
+            consultationId: payment.consultationId,
+          },
+        );
 
-        if (payment.consultation.veterinarian?.user?.expoPushToken) {
-          await this.notificationsService.sendPushNotification(
-            payment.consultation.veterinarian.user.expoPushToken,
-            'Consulta pagada',
-            'El cliente ya realizó el pago. Puedes continuar con la consulta.',
-            {
-              type: 'payment_approved',
-              consultationId: payment.consultationId,
-            },
-          );
-        }
+        await this.notificationsService.sendPushToUser(
+          payment.consultation.veterinarian.userId,
+          'Consulta pagada',
+          'El cliente ya realizó el pago. Puedes continuar con la consulta.',
+          {
+            type: 'payment_approved',
+            consultationId: payment.consultationId,
+          },
+        );
 
         return {
           consultationId: payment.consultationId,
           status: 'paid',
+        };
+      }
+
+      if (paymentStatus === PaymentStatus.APPROVED) {
+        return {
+          consultationId: payment.consultationId,
+          status: 'paid',
+          duplicated: true,
         };
       }
     }

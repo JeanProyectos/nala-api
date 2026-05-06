@@ -278,15 +278,8 @@ export class RemindersService {
       let sentCount = 0;
 
       for (const reminder of reminders) {
-        if (!reminder.user.expoPushToken) {
-          this.logger.debug(
-            `Usuario ${reminder.user.id} no tiene expoPushToken registrado`,
-          );
-          continue;
-        }
-
-        const success = await this.notificationsService.sendPushNotification(
-          reminder.user.expoPushToken,
+        const delivered = await this.notificationsService.sendPushToUser(
+          reminder.user.id,
           reminder.title,
           reminder.message,
           {
@@ -297,7 +290,7 @@ export class RemindersService {
           },
         );
 
-        if (success) {
+        if (delivered > 0) {
           await this.prisma.reminder.update({
             where: { id: reminder.id },
             data: {

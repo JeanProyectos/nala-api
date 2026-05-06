@@ -15,3 +15,6 @@ appsettings.Production.json
 
 # Archivos subidos en runtime (no versionar)
 uploads/
+
+# Workspaces de editor (evitar subir por error)
+*.code-workspace

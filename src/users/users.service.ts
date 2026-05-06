@@ -194,6 +194,19 @@ export class UsersService {
           { id: 'profile', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
         ],
       },
+      FINANCE: {
+        permissions: [
+          'settlements:read',
+          'settlements:write',
+          'settlements:pay',
+          'vets:read',
+        ],
+        menu: [
+          { id: 'index', label: 'Inicio', path: '/index', icon: '🏠' },
+          { id: 'settlements', label: 'Liquidaciones', path: '/admin/settlements', icon: '💰' },
+          { id: 'profile', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
+        ],
+      },
     };
 
     return {
@@ -206,6 +219,16 @@ export class UsersService {
    * Registra o actualiza el token de notificaciones push del usuario
    */
   async registerPushToken(userId: number, expoPushToken: string) {
+    const pushDevice = (this.prisma as unknown as { pushDevice?: { upsert: (args: object) => Promise<unknown> } })
+      .pushDevice;
+    if (pushDevice?.upsert) {
+      await pushDevice.upsert({
+        where: { token: expoPushToken },
+        create: { userId, token: expoPushToken },
+        update: { userId },
+      });
+    }
+
     return this.prisma.user.update({
       where: { id: userId },
       data: { expoPushToken },

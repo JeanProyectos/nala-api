@@ -926,6 +926,47 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * Veterinario canceló la consulta: notificar sala, limpiar estado WebRTC y cerrar llamada en clientes.
+   */
+  notifyConsultationCancelled(
+    consultationId: number,
+    payload: { reason?: string; cancelledByVetUserId?: number; cancelledByUserId?: number },
+  ) {
+    const room = `consultation_${consultationId}`;
+    const reason = payload.reason || 'CANCELLED_BY_VET';
+    const body = {
+      consultationId,
+      reason,
+      cancelledByVetUserId: payload.cancelledByVetUserId,
+      cancelledByUserId: payload.cancelledByUserId,
+    };
+    this.server.to(room).emit('consultation_cancelled', body);
+    this.resetConsultationCallState(consultationId, 'consultation_cancelled');
+    this.server.to(room).emit('call_end', {
+      consultationId,
+      reason,
+      type: 'VIDEO',
+      from: payload.cancelledByVetUserId || payload.cancelledByUserId,
+    });
+    this.appendServerCallLog(consultationId, 'INFO', 'consultation_cancelled', body);
+  }
+
+  /**
+   * Consulta pasó a FINISHED (PATCH finish u otro flujo que persista ese estado).
+   * La app del veterinario muestra calificación al tutor solo ante este evento, no al colgar la llamada.
+   */
+  notifyConsultationFinished(consultationId: number) {
+    const room = `consultation_${consultationId}`;
+    const body = {
+      consultationId,
+      status: 'FINISHED' as const,
+      timestamp: new Date().toISOString(),
+    };
+    this.server.to(room).emit('consultation_finished', body);
+    this.appendServerCallLog(consultationId, 'INFO', 'consultation_finished', body);
+  }
+
+  /**
    * Iniciar llamada automáticamente cuando el veterinario acepta una consulta VOICE/VIDEO
    * Este método se llama desde el servicio de consultas cuando se acepta una consulta
    */

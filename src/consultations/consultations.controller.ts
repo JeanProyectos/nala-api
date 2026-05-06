@@ -99,6 +99,51 @@ export class ConsultationsController {
   }
 
   /**
+   * Cancela la consulta (solo veterinario; antes o durante la llamada).
+   * PATCH /consultations/:id/cancel
+   */
+  @Patch(':id/cancel')
+  async cancel(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { reason?: string },
+  ) {
+    const vet = await this.prisma.veterinarian.findUnique({
+      where: { userId: req.user.userId },
+    });
+    if (!vet) {
+      throw new ForbiddenException('Solo los veterinarios pueden cancelar la consulta');
+    }
+    return this.consultationsService.cancelByVeterinarian(id, req.user.userId, body?.reason);
+  }
+
+  /**
+   * Cancela la consulta desde el usuario cuando aun está pendiente.
+   * PATCH /consultations/:id/cancel-by-user
+   */
+  @Patch(':id/cancel-by-user')
+  cancelByUser(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { reason?: string },
+  ) {
+    return this.consultationsService.cancelByUser(id, req.user.userId, body?.reason);
+  }
+
+  /**
+   * Calificación del tutor por el veterinario (tras consulta finalizada).
+   * POST /consultations/:id/rate-owner
+   */
+  @Post(':id/rate-owner')
+  rateOwner(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() rateDto: RateConsultationDto,
+  ) {
+    return this.consultationsService.rateOwnerByVet(id, req.user.userId, rateDto);
+  }
+
+  /**
    * Inicia una consulta
    * PATCH /consultations/:id/start
    */
